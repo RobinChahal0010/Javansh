@@ -8,19 +8,7 @@ import java.nio.file.Path;
 
 public class JavaExecutor {
 
-    public static void main(String[] args) throws IOException {
-
-        String sourceCode = """
-                public class UserProgram {
-                    public static void main(String[] args) {
-                        int a = 10;
-                        int b = 20;
-                        int sum = a + b;
-
-                        System.out.println("Sum: " + sum);
-                    }
-                }
-                """;
+    public ExecutionResult execute(String sourceCode) throws IOException {
 
         Path tempDir = Files.createTempDirectory("javansh-");
         File javaFile = tempDir.resolve("UserProgram.java").toFile();
@@ -30,50 +18,74 @@ public class JavaExecutor {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 
         if (compiler == null) {
-            System.out.println("Java compiler not found.");
-            return;
+            return new ExecutionResult(
+                    false,
+                    "",
+                    "Java compiler not found.",
+                    -1,
+                    0
+            );
         }
 
         // Compile
-        int compileResult = compiler.run(
-                null,
-                null,
-                null,
+        ProcessBuilder compileProcess = new ProcessBuilder(
+                "javac",
                 "-d",
                 tempDir.toString(),
                 javaFile.getAbsolutePath()
         );
 
-        if (compileResult != 0) {
-            System.out.println("Compilation failed!");
-            return;
+        compileProcess.redirectErrorStream(true);
+
+        Process compilerProcess = compileProcess.start();
+
+        String compileOutput = readOutput(
+                compilerProcess.getInputStream()
+        );
+
+        int compileExitCode;
+
+        try {
+            compileExitCode = compilerProcess.waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+
+            return new ExecutionResult(
+                    false,
+                    "",
+                    "Compilation interrupted.",
+                    -1,
+                    0
+            );
         }
 
-        System.out.println("Compilation successful!");
+        if (compileExitCode != 0) {
+            return new ExecutionResult(
+                    false,
+                    "",
+                    compileOutput,
+                    compileExitCode,
+                    0
+            );
+        }
 
         // Execute
-        ProcessBuilder processBuilder = new ProcessBuilder(
+        ProcessBuilder runProcess = new ProcessBuilder(
                 "java",
                 "-cp",
                 tempDir.toString(),
                 "UserProgram"
         );
 
-        processBuilder.redirectErrorStream(true);
+        runProcess.redirectErrorStream(true);
 
-        Process process = processBuilder.start();
+        long startTime = System.nanoTime();
 
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream())
+        Process process = runProcess.start();
+
+        String output = readOutput(
+                process.getInputStream()
         );
-
-        String line;
-
-        System.out.println("\n--- Program Output ---");
-
-        while ((line = reader.readLine()) != null) {
-            System.out.println(line);
-        }
 
         int exitCode;
 
@@ -81,11 +93,46 @@ public class JavaExecutor {
             exitCode = process.waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            System.out.println("Execution interrupted.");
-            return;
+
+            return new ExecutionResult(
+                    true,
+                    output,
+                    "Execution interrupted.",
+                    -1,
+                    elapsedMillis(startTime)
+            );
         }
 
-        System.out.println("----------------------");
-        System.out.println("Exit Code: " + exitCode);
+        long executionTime = elapsedMillis(startTime);
+
+        return new ExecutionResult(
+                true,
+                output,
+                "",
+                exitCode,
+                executionTime
+        );
+    }
+
+    private String readOutput(InputStream inputStream)
+            throws IOException {
+
+        BufferedReader reader = new BufferedReader(
+                new InputStreamReader(inputStream)
+        );
+
+        StringBuilder output = new StringBuilder();
+
+        String line;
+
+        while ((line = reader.readLine()) != null) {
+            output.append(line).append(System.lineSeparator());
+        }
+
+        return output.toString();
+    }
+
+    private long elapsedMillis(long startTime) {
+        return (System.nanoTime() - startTime) / 1_000_000;
     }
 }
