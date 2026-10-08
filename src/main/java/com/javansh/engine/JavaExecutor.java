@@ -1,7 +1,5 @@
 package com.javansh.engine;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,18 +13,6 @@ public class JavaExecutor {
 
         Files.writeString(javaFile.toPath(), sourceCode);
 
-        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-
-        if (compiler == null) {
-            return new ExecutionResult(
-                    false,
-                    "",
-                    "Java compiler not found.",
-                    -1,
-                    0
-            );
-        }
-
         // Compile
         ProcessBuilder compileProcess = new ProcessBuilder(
                 "javac",
@@ -35,12 +21,10 @@ public class JavaExecutor {
                 javaFile.getAbsolutePath()
         );
 
-        compileProcess.redirectErrorStream(true);
-
         Process compilerProcess = compileProcess.start();
 
         String compileOutput = readOutput(
-                compilerProcess.getInputStream()
+                compilerProcess.getErrorStream()
         );
 
         int compileExitCode;
@@ -59,6 +43,7 @@ public class JavaExecutor {
             );
         }
 
+        // Compilation failed
         if (compileExitCode != 0) {
             return new ExecutionResult(
                     false,
@@ -77,14 +62,16 @@ public class JavaExecutor {
                 "UserProgram"
         );
 
-        runProcess.redirectErrorStream(true);
+        Process process = runProcess.start();
 
         long startTime = System.nanoTime();
 
-        Process process = runProcess.start();
-
         String output = readOutput(
                 process.getInputStream()
+        );
+
+        String error = readOutput(
+                process.getErrorStream()
         );
 
         int exitCode;
@@ -108,7 +95,7 @@ public class JavaExecutor {
         return new ExecutionResult(
                 true,
                 output,
-                "",
+                error,
                 exitCode,
                 executionTime
         );
@@ -126,7 +113,8 @@ public class JavaExecutor {
         String line;
 
         while ((line = reader.readLine()) != null) {
-            output.append(line).append(System.lineSeparator());
+            output.append(line)
+                  .append(System.lineSeparator());
         }
 
         return output.toString();
