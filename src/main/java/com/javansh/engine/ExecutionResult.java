@@ -1,14 +1,9 @@
+
 package com.javansh.engine;
-public enum ExecutionStatus {
-    COMPLETED,
-    COMPILATION_FAILED,
-    RUNTIME_ERROR,
-    TIMED_OUT,
-    INTERRUPTED
-}
 
 public class ExecutionResult {
 
+    private final ExecutionStatus status;
     private final boolean compilationSuccessful;
     private final String output;
     private final String error;
@@ -16,17 +11,23 @@ public class ExecutionResult {
     private final long executionTimeMs;
 
     public ExecutionResult(
+            ExecutionStatus status,
             boolean compilationSuccessful,
             String output,
             String error,
             int exitCode,
             long executionTimeMs
     ) {
+        this.status = status;
         this.compilationSuccessful = compilationSuccessful;
         this.output = output;
         this.error = error;
         this.exitCode = exitCode;
         this.executionTimeMs = executionTimeMs;
+    }
+
+    public ExecutionStatus getStatus() {
+        return status;
     }
 
     public boolean isCompilationSuccessful() {
@@ -52,7 +53,8 @@ public class ExecutionResult {
     @Override
     public String toString() {
         return "ExecutionResult{" +
-                "compilationSuccessful=" + compilationSuccessful +
+                "status=" + status +
+                ", compilationSuccessful=" + compilationSuccessful +
                 ", output='" + output + '\'' +
                 ", error='" + error + '\'' +
                 ", exitCode=" + exitCode +
