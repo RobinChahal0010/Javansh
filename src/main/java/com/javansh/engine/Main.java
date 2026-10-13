@@ -17,6 +17,7 @@ public class Main {
 
         ExecutionResult result = executor.execute(code);
 
+        System.out.println("Status: " + result.getStatus());
         System.out.println("Compilation: "
                 + result.isCompilationSuccessful());
 
