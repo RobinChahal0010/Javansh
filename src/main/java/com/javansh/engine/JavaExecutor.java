@@ -16,22 +16,19 @@ public class JavaExecutor {
     public ExecutionResult execute(String sourceCode) throws IOException {
 
         Path tempDir = Files.createTempDirectory("javansh-");
-        File javaFile = tempDir.resolve("UserProgram.java").toFile();
-
-        Files.writeString(javaFile.toPath(), sourceCode);
+        long startTime = System.nanoTime();
 
         try {
-            // Compile the submitted Java program
-            ProcessBuilder compileBuilder = new ProcessBuilder(
+            File javaFile = tempDir.resolve("UserProgram.java").toFile();
+            Files.writeString(javaFile.toPath(), sourceCode);
+
+            Process compiler = new ProcessBuilder(
                     "javac", "-d", tempDir.toString(),
                     javaFile.getAbsolutePath()
-            );
-
-            Process compiler = compileBuilder.start();
+            ).start();
 
             CompletableFuture<String> compileOutput =
                     readAsync(compiler.getInputStream());
-
             CompletableFuture<String> compileError =
                     readAsync(compiler.getErrorStream());
 
@@ -43,45 +40,34 @@ public class JavaExecutor {
             } catch (InterruptedException e) {
                 compiler.destroyForcibly();
                 Thread.currentThread().interrupt();
-
-                return new ExecutionResult(
-                        false, "", "Compilation interrupted.", -1, 0);
+                return result(ExecutionStatus.INTERRUPTED, false,
+                        "", "Compilation interrupted.", -1, startTime);
             }
 
             if (!compiled) {
                 compiler.destroyForcibly();
-
-                return new ExecutionResult(
-                        false, "",
-                        "Compilation timed out after "
-                                + COMPILE_TIMEOUT_SECONDS + " seconds.",
-                        -1, 0);
+                return result(ExecutionStatus.TIMED_OUT, false,
+                        "", "Compilation timed out.", -1, startTime);
             }
 
             String compilerErrors = getOutput(compileError);
             getOutput(compileOutput);
 
             if (compiler.exitValue() != 0) {
-                return new ExecutionResult(
-                        false, "", compilerErrors,
-                        compiler.exitValue(), 0);
+                return result(ExecutionStatus.COMPILATION_FAILED, false,
+                        "", compilerErrors, compiler.exitValue(), startTime);
             }
 
-            // Execute the compiled program
-            ProcessBuilder runBuilder = new ProcessBuilder(
+            Process process = new ProcessBuilder(
                     "java", "-cp", tempDir.toString(), "UserProgram"
-            );
-
-            Process process = runBuilder.start();
+            ).start();
 
             CompletableFuture<String> outputFuture =
                     readAsync(process.getInputStream());
-
             CompletableFuture<String> errorFuture =
                     readAsync(process.getErrorStream());
 
-            long startTime = System.nanoTime();
-
+            long executionStart = System.nanoTime();
             boolean finished;
 
             try {
@@ -90,37 +76,30 @@ public class JavaExecutor {
             } catch (InterruptedException e) {
                 process.destroyForcibly();
                 Thread.currentThread().interrupt();
-
-                return new ExecutionResult(
-                        true, "", "Execution interrupted.",
-                        -1, elapsedMillis(startTime));
+                return result(ExecutionStatus.INTERRUPTED, true,
+                        "", "Execution interrupted.", -1, executionStart);
             }
-
-            long executionTime = elapsedMillis(startTime);
 
             if (!finished) {
                 process.destroyForcibly();
-
-                return new ExecutionResult(
-                        true, "",
-                        "Execution timed out after "
+                return result(ExecutionStatus.TIMED_OUT, true,
+                        "", "Execution timed out after "
                                 + EXECUTION_TIMEOUT_SECONDS + " seconds.",
-                        -1, executionTime);
+                        -1, executionStart);
             }
 
             String output = getOutput(outputFuture);
             String error = getOutput(errorFuture);
+            int exitCode = process.exitValue();
 
-            return new ExecutionResult(
-                    true,
-                    output,
-                    error,
-                    process.exitValue(),
-                    executionTime
-            );
+            ExecutionStatus status = exitCode == 0
+                    ? ExecutionStatus.COMPLETED
+                    : ExecutionStatus.RUNTIME_ERROR;
+
+            return result(status, true, output, error,
+                    exitCode, executionStart);
 
         } finally {
-            // Remove temporary source and compiled files
             try (var paths = Files.walk(tempDir)) {
                 paths.sorted((a, b) -> b.compareTo(a))
                         .forEach(path -> {
@@ -132,6 +111,22 @@ public class JavaExecutor {
                         });
             }
         }
+    }
+
+    private ExecutionResult result(
+            ExecutionStatus status,
+            boolean compilationSuccessful,
+            String output,
+            String error,
+            int exitCode,
+            long startTime
+    ) {
+        long elapsed = (System.nanoTime() - startTime) / 1_000_000;
+
+        return new ExecutionResult(
+                status, compilationSuccessful,
+                output, error, exitCode, elapsed
+        );
     }
 
     private CompletableFuture<String> readAsync(InputStream stream) {
@@ -146,7 +141,6 @@ public class JavaExecutor {
 
     private String getOutput(CompletableFuture<String> future)
             throws IOException {
-
         try {
             return future.get();
         } catch (InterruptedException e) {
@@ -170,9 +164,5 @@ public class JavaExecutor {
 
             return output.toString();
         }
-    }
-
-    private long elapsedMillis(long startTime) {
-        return (System.nanoTime() - startTime) / 1_000_000;
     }
 }
