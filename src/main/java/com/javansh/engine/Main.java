@@ -27,7 +27,7 @@ String sampleCode = """
         }
         """;
 
-System.out.println("\nCode Intelligence:");
+
 analyzer.analyze(sampleCode).forEach(System.out::println);
 
         JavaExecutor executor = new JavaExecutor();
