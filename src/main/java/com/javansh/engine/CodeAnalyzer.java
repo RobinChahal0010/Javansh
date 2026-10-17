@@ -16,21 +16,22 @@ public class CodeAnalyzer {
         );
 
         Matcher matcher = loopPattern.matcher(sourceCode);
-        int loopCount = 0;
 
+        int loopCount = 0;
         while (matcher.find()) {
             loopCount++;
         }
 
-        if (loopCount >= 2) {
+        if (loopCount == 0) {
+            findings.add("No loops detected.");
+        } else if (loopCount == 1) {
+            findings.add("One loop detected. Review its iteration count.");
+        } else {
             findings.add(
-                    "Multiple loops detected. Review whether any loops "
-                    + "are nested, as nested loops may increase time complexity."
+                    loopCount + " loops detected. "
+                    + "This basic analyzer cannot yet confirm nesting "
+                    + "or determine Big-O complexity."
             );
-        }
-
-        if (findings.isEmpty()) {
-            findings.add("No obvious loop-related patterns detected.");
         }
 
         return findings;
