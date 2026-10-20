@@ -8,32 +8,52 @@ import java.util.regex.Pattern;
 
 public class CodeAnalyzer {
 
+    private static final Pattern LOOP_PATTERN =
+            Pattern.compile("\\b(for|while)\\s*\\(");
+
     public List<String> analyze(String sourceCode) {
         List<String> findings = new ArrayList<>();
 
-        Pattern loopPattern = Pattern.compile(
-                "\\b(for|while)\\s*\\("
-        );
+        String code = removeCommentsAndStrings(sourceCode);
+        Matcher matcher = LOOP_PATTERN.matcher(code);
 
-        Matcher matcher = loopPattern.matcher(sourceCode);
+        int braceDepth = 0;
+        int maxLoopDepth = 0;
+        int totalLoops = 0;
 
-        int loopCount = 0;
         while (matcher.find()) {
-            loopCount++;
+            int loopPosition = matcher.start();
+            int depth = 0;
+
+            for (int i = 0; i < loopPosition; i++) {
+                if (code.charAt(i) == '{') {
+                    depth++;
+                } else if (code.charAt(i) == '}') {
+                    depth--;
+                }
+            }
+
+            totalLoops++;
+            maxLoopDepth = Math.max(maxLoopDepth, depth);
         }
 
-        if (loopCount == 0) {
+        if (totalLoops == 0) {
             findings.add("No loops detected.");
-        } else if (loopCount == 1) {
-            findings.add("One loop detected. Review its iteration count.");
         } else {
+            findings.add("Loops detected: " + totalLoops);
             findings.add(
-                    loopCount + " loops detected. "
-                    + "This basic analyzer cannot yet confirm nesting "
-                    + "or determine Big-O complexity."
+                    "This basic analyzer cannot reliably determine "
+                    + "loop nesting or Big-O complexity yet."
             );
         }
 
         return findings;
+    }
+
+    private String removeCommentsAndStrings(String source) {
+        return source
+                .replaceAll("(?s)/\\*.*?\\*/", " ")
+                .replaceAll("(?m)//.*$", " ")
+                .replaceAll("\"(?:\\\\.|[^\"\\\\])*\"", "\"\"");
     }
 }
